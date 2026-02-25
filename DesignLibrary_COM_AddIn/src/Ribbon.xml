@@ -1,0 +1,27 @@
+<customUI xmlns="http://schemas.microsoft.com/office/2009/07/customui" onLoad="OnLoad">
+  <ribbon>
+    <tabs>
+      <tab id="DesignLibraryTab" label="Design Library">
+        
+        <group id="LibraryGroup" label="Insert Design">
+           <dynamicMenu id="dynLibrary" label="My Designs" size="large" imageMso="ShapesInsertGallery" invalidateContentOnDrop="true" getContent="GetLibraryMenuContent" />
+        </group>
+
+        <group id="SaveGroup" label="Save Selected Shapes">
+          <editBox id="txtDesignName" label="Name:" imageMso="Rename" onChange="OnNameChange" getText="GetDesignName" />
+          <editBox id="txtDesignCategory" label="Category:" imageMso="Folder" onChange="OnCategoryChange" getText="GetDesignCategory" />
+          <button id="btnSave" label="Save Selection" size="large" imageMso="SaveSelectionToQuickPartGallery" onAction="OnSaveDesign" />
+        </group>
+        
+        <group id="PageSetupGroup" label="Slide Size">
+          <button id="btnResizeSlide" label="Resize to 20x11.25" size="large" imageMso="PageOrientationLandscape" onAction="OnResizeSlide" />
+        </group>
+        
+        <group id="ManageGroup" label="Advanced Management">
+          <toggleButton id="tglTaskPane" label="Side Panel Manager" size="large" imageMso="WindowSideBySide" onAction="OnToggleTaskPane" getPressed="GetTaskPaneState" />
+        </group>
+        
+      </tab>
+    </tabs>
+  </ribbon>
+</customUI>

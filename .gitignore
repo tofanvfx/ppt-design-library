@@ -1,0 +1,19 @@
+# Build output
+*.dll
+*.exe
+*.pdb
+*.cache
+
+# Inno Setup output
+DesignLibrary_COM_AddIn/Output/
+
+# Registry files (generated during build)
+*.reg
+
+# Zip files
+*.zip
+
+# OS files
+Thumbs.db
+desktop.ini
+.DS_Store
