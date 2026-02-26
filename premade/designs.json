@@ -1,0 +1,10 @@
+{
+  "designs": [
+    {
+      "name": "Sample Title Box",
+      "category": "Text",
+      "pptx_url": "https://raw.githubusercontent.com/tofanvfx/ppt-design-library/main/premade/sample_title_box.pptx",
+      "preview_url": "https://raw.githubusercontent.com/tofanvfx/ppt-design-library/main/premade/sample_title_box.png"
+    }
+  ]
+}

@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Text.RegularExpressions;
 using Microsoft.Office.Core;
 using PowerPoint = Microsoft.Office.Interop.PowerPoint;
 
@@ -15,9 +17,18 @@ namespace DesignLibraryAddIn
         public string CreatedDate { get; set; }
     }
 
+    public class OnlineDesignItem
+    {
+        public string Name { get; set; }
+        public string Category { get; set; }
+        public string PptxUrl { get; set; }
+        public string PreviewUrl { get; set; }
+    }
+
     public class DesignManager
     {
         private const string METADATA_FILE = "designs.txt";
+        private const string ONLINE_MANIFEST_URL = "https://raw.githubusercontent.com/tofanvfx/ppt-design-library/main/premade/designs.json";
         private PowerPoint.Application _ppt;
 
         public DesignManager(PowerPoint.Application pptApp)
@@ -44,6 +55,8 @@ namespace DesignLibraryAddIn
             if (sanitized.Length > 50) sanitized = sanitized.Substring(0, 50);
             return sanitized.Trim();
         }
+
+        // ─── LOCAL LIBRARY ────────────────────────────────────────────────────
 
         public void SaveSelectedAsDesign(string designName, string category)
         {
@@ -85,7 +98,7 @@ namespace DesignLibraryAddIn
             }
 
             PowerPoint.Presentation designPres = _ppt.Presentations.Open(filePath, MsoTriState.msoTrue, MsoTriState.msoFalse, MsoTriState.msoFalse);
-            
+
             if (designPres.Slides.Count > 0 && designPres.Slides[1].Shapes.Count > 0)
             {
                 designPres.Slides[1].Shapes.Range().Copy();
@@ -156,11 +169,6 @@ namespace DesignLibraryAddIn
                 }
             }
             File.WriteAllLines(metaPath, lines);
-            
-            // Note: We don't necessarily rename the underlying file (the ID), just the DisplayName.
-            // If we did want to rename the file, we would rename both .pptx and .png here.
-            // But since the system uses 'fileName' purely as a unique ID backed by timestamp,
-            // changing the display name in 'designs.txt' is all that's needed for the user.
         }
 
         private void SaveMetadata(string fileName, string designName, string category)
@@ -177,6 +185,117 @@ namespace DesignLibraryAddIn
 
             var lines = File.ReadAllLines(metaPath).Where(l => !l.StartsWith(fileName + "|")).ToList();
             File.WriteAllLines(metaPath, lines);
+        }
+
+        // ─── ONLINE / GITHUB LIBRARY ──────────────────────────────────────────
+
+        /// <summary>
+        /// Fetches the premade designs manifest from GitHub and parses it.
+        /// Always fetched live — no caching.
+        /// </summary>
+        public List<OnlineDesignItem> FetchOnlineDesigns()
+        {
+            var designs = new List<OnlineDesignItem>();
+
+            string json;
+            using (var client = new WebClient())
+            {
+                // Bypass cached CDN versions
+                client.Headers.Add("Cache-Control", "no-cache");
+                json = client.DownloadString(ONLINE_MANIFEST_URL);
+            }
+
+            // Simple JSON parsing — no external library needed.
+            // Each design block: { "name": "...", "category": "...", "pptx_url": "...", "preview_url": "..." }
+            var blockPattern = new Regex(@"\{[^{}]+\}", RegexOptions.Singleline);
+            var fieldPattern = new Regex(@"""(\w+)""\s*:\s*""([^""]+)""");
+
+            foreach (Match block in blockPattern.Matches(json))
+            {
+                var fields = new Dictionary<string, string>();
+                foreach (Match field in fieldPattern.Matches(block.Value))
+                {
+                    fields[field.Groups[1].Value] = field.Groups[2].Value;
+                }
+
+                if (fields.ContainsKey("name") && fields.ContainsKey("pptx_url"))
+                {
+                    designs.Add(new OnlineDesignItem
+                    {
+                        Name        = fields.ContainsKey("name")        ? fields["name"]        : "Untitled",
+                        Category    = fields.ContainsKey("category")    ? fields["category"]    : "General",
+                        PptxUrl     = fields.ContainsKey("pptx_url")    ? fields["pptx_url"]    : "",
+                        PreviewUrl  = fields.ContainsKey("preview_url") ? fields["preview_url"] : ""
+                    });
+                }
+            }
+
+            return designs;
+        }
+
+        /// <summary>
+        /// Downloads the preview PNG from a URL into a MemoryStream (caller owns lifetime).
+        /// Returns null if the URL is empty or download fails.
+        /// </summary>
+        public System.IO.MemoryStream DownloadPreviewImage(string previewUrl)
+        {
+            if (string.IsNullOrEmpty(previewUrl)) return null;
+            try
+            {
+                using (var client = new WebClient())
+                {
+                    byte[] data = client.DownloadData(previewUrl);
+                    return new System.IO.MemoryStream(data);
+                }
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Downloads the .pptx to a temp file, copies shapes from slide 1 to the
+        /// active slide, then deletes the temp file. Read-only by design.
+        /// </summary>
+        public void InsertOnlineDesign(string pptxUrl)
+        {
+            if (string.IsNullOrEmpty(pptxUrl))
+                throw new ArgumentException("No download URL provided.");
+
+            string tempFile = Path.GetTempFileName() + ".pptx";
+
+            try
+            {
+                using (var client = new WebClient())
+                {
+                    client.DownloadFile(pptxUrl, tempFile);
+                }
+
+                PowerPoint.Presentation designPres = _ppt.Presentations.Open(
+                    tempFile,
+                    MsoTriState.msoTrue,  // ReadOnly
+                    MsoTriState.msoFalse,
+                    MsoTriState.msoFalse  // Hidden window
+                );
+
+                try
+                {
+                    if (designPres.Slides.Count > 0 && designPres.Slides[1].Shapes.Count > 0)
+                    {
+                        designPres.Slides[1].Shapes.Range().Copy();
+                        ((PowerPoint.Slide)_ppt.ActiveWindow.View.Slide).Shapes.Paste();
+                    }
+                }
+                finally
+                {
+                    designPres.Close();
+                }
+            }
+            finally
+            {
+                try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
+            }
         }
     }
 }
